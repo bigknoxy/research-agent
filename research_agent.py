@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 _console = Console()
 
-SCRIPT_VERSION = "2.0.1"
+SCRIPT_VERSION = "2.1.0"
 
 # ──────────────────────────────────────────────
 # 1. TaskPlanner — Dynamic Task Decomposition
@@ -127,10 +127,12 @@ class WebCrawler:
         self.prompt_override = prompt_override
         self.searxng_instance = searxng_instance
         self._client = httpx.AsyncClient(timeout=self.timeout, follow_redirects=True)
+        self._wiki_sem = asyncio.Semaphore(1)
 
     async def fetch(self, url: str) -> str | None:
-        await asyncio.sleep(random.uniform(1.0, 3.0))
         for attempt in range(self.max_retries + 1):
+            if attempt > 0:
+                await asyncio.sleep(random.uniform(2.0, 5.0))
             try:
                 resp = await self._client.get(url, headers=self._headers())
                 resp.raise_for_status()
@@ -159,8 +161,7 @@ class WebCrawler:
             except httpx.RequestError as e:
                 logger.warning("Request failed for %s (attempt %d): %s", url, attempt + 1, e)
             except Exception as e:
-                logger.error("Unexpected error fetching %s: %s", url, e)
-                return None
+                logger.error("Unexpected error fetching %s (attempt %d): %s", url, attempt + 1, e)
         logger.error("Failed to fetch %s after %d retries", url, self.max_retries)
         return None
 
@@ -182,6 +183,12 @@ class WebCrawler:
 
     async def close(self) -> None:
         await self._client.aclose()
+
+    async def __aenter__(self) -> WebCrawler:
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        await self.close()
 
     @staticmethod
     def _extract_search_term(url: str) -> str:
@@ -277,8 +284,6 @@ class WebCrawler:
 
     async def fetch_wikipedia(self, query: str) -> str | None:
         """Fallback: fetch summary from Wikipedia API for a given query."""
-        if not hasattr(self, '_wiki_sem'):
-            self._wiki_sem = asyncio.Semaphore(1)
         async with self._wiki_sem:
             await asyncio.sleep(random.uniform(0.3, 0.8))
             search_url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(query)}&format=json&srlimit=3"
@@ -691,6 +696,8 @@ class ResearchAgent:
 
     async def run(self, capture: TranscriptCapture | None = None) -> ResearchState:
         state = self.session.load() or ResearchState(query=self.query)
+        if state.query != self.query:
+            state = ResearchState(query=self.query)
         if state.status == "completed":
             logger.info("Research already completed for this query. Use --force to re-run.")
             return state
@@ -920,8 +927,7 @@ class OllamaGrader:
         if cls._available is not None:
             return cls._available
         try:
-            import httpx
-            r = httpx.get("http://localhost:11434/api/tags", timeout=1.0)
+            r = httpx.get("http://localhost:11434/api/tags", timeout=1.0) 
             if r.status_code == 200:
                 models = r.json().get("models", [])
                 names = [m["name"] for m in models]
@@ -956,7 +962,6 @@ Query: {query}
 
 Return ONLY a JSON object with keys: score (float 0-1), reasons (list of strings), analysis (string)."""
         try:
-            import httpx
             model_name = cls._model or cls.MODEL
             r = httpx.post(cls.OLLAMA_CHAT_URL, json={
                 "model": model_name,
@@ -966,8 +971,7 @@ Return ONLY a JSON object with keys: score (float 0-1), reasons (list of strings
             }, timeout=15.0)
             if r.status_code == 200:
                 data = r.json()
-                import json as j
-                parsed = j.loads(data.get("message", {}).get("content", "{}"))
+                parsed = json.loads(data.get("message", {}).get("content", "{}"))
                 return {
                     "score": float(parsed.get("score", 0.5)),
                     "reasons": parsed.get("reasons", ["Ollama graded this report"]),
@@ -976,7 +980,6 @@ Return ONLY a JSON object with keys: score (float 0-1), reasons (list of strings
         except Exception:
             pass
         try:
-            import httpx
             model_name = cls._model or cls.MODEL
             r = httpx.post(cls.OLLAMA_URL, json={
                 "model": model_name,
@@ -985,8 +988,7 @@ Return ONLY a JSON object with keys: score (float 0-1), reasons (list of strings
             }, timeout=15.0)
             if r.status_code == 200:
                 data = r.json()
-                import json as j
-                parsed = j.loads(data.get("response", "{}"))
+                parsed = json.loads(data.get("response", "{}"))
                 return {
                     "score": float(parsed.get("score", 0.5)),
                     "reasons": parsed.get("reasons", ["Ollama graded this report"]),
@@ -1039,15 +1041,6 @@ class HeuristicGrader:
         precision = 1.0 - (errors / n_tools) if n_tools > 0 else 0.0
         return {"score": round(precision, 2), "reason": f"{errors}/{n_tools} tool calls had errors"}
 
-
-class ModelGrader:
-    @classmethod
-    def grade_synthesis_nuance(cls, report: str, query: str = "") -> dict:
-        return OllamaGrader.grade_synthesis_nuance(report, query)
-
-    @classmethod
-    def grade_tool_precision(cls, transcript) -> dict:
-        return OllamaGrader.grade_tool_precision(transcript)
 
 
 class EvaluationRunner:
@@ -1110,8 +1103,8 @@ class EvaluationRunner:
             transcript = capture.finish("completed" if capture.error_count == 0 else "crashed")
 
             code_grades = CodeGrader.grade_all(transcript)
-            model_grade = ModelGrader.grade_synthesis_nuance(transcript.report, task.query)
-            tool_grade = ModelGrader.grade_tool_precision(transcript)
+            model_grade = OllamaGrader.grade_synthesis_nuance(transcript.report, task.query)
+            tool_grade = OllamaGrader.grade_tool_precision(transcript)
 
             runs.append({
                 "run_id": run_id,
@@ -1297,7 +1290,7 @@ class GEPALoop:
                 front.append(ci)
         return front
 
-    def next_generation(self, gen_lessions: dict[str, list[Lesson]] | None = None) -> list[PromptCandidate]:
+    def next_generation(self, gen_lessons: dict[str, list[Lesson]] | None = None) -> list[PromptCandidate]:
         self.generation += 1
         front = self.pareto_select(self.pool)
         front_sorted = sorted(front, key=lambda c: c.accuracy, reverse=True)
@@ -1305,11 +1298,11 @@ class GEPALoop:
         for i in range(self.pool_size):
             parent = front_sorted[i % len(front_sorted)] if front_sorted else self.pool[i % len(self.pool)]
             mutation_intensity = min(0.3 + self.generation * 0.1, 0.8)
-            parent_lessions = (gen_lessions or {}).get(parent.id, []) if gen_lessions else []
+            parent_lessons = (gen_lessons or {}).get(parent.id, []) if gen_lessons else []
             new_prompts = self._mutate_prompts(
                 parent.prompt_template.copy(),
                 intensity=mutation_intensity,
-                lessons=parent_lessions,
+                lessons=parent_lessons,
             )
             candidate = PromptCandidate(
                 id=f"gen{self.generation}-{i}",

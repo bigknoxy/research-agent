@@ -7,7 +7,12 @@ script = Path(__file__).resolve().parent / 'research_agent.py'
 content = script.read_text()
 
 # Bump version
-content = content.replace("SCRIPT_VERSION = \"2.0.0\"", "SCRIPT_VERSION = \"2.0.1\"")
+ver = re.search(r'SCRIPT_VERSION = "(.*?)"', content)
+if ver:
+    parts = [int(x) for x in ver.group(1).split(".")]
+    parts[2] += 1
+    new_ver = ".".join(str(x) for x in parts)
+    content = content.replace(f'SCRIPT_VERSION = "{ver.group(1)}"', f'SCRIPT_VERSION = "{new_ver}"')
 
 # Update prompt for planner
 content = re.sub(
@@ -38,4 +43,5 @@ content = re.sub(
 )
 
 script.write_text(content)
-print("Patched to v2.0.1 with 4 prompt updates")
+new_ver_match = re.search(r'SCRIPT_VERSION = "(.*?)"', content)
+print(f"Patched to v{new_ver_match.group(1) if new_ver_match else '?'} with 4 prompt updates")
