@@ -1,0 +1,26 @@
+[project]
+name = "research-agent"
+version = "2.0.1"
+description = "Self-improving deep research agent for the terminal"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+    "rich>=13.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/bigknoxy/research-agent"
+Documentation = "https://bigknoxy.github.io/research-agent/"
+Source = "https://github.com/bigknoxy/research-agent"
+
+[project.scripts]
+research-agent = "research_agent:main"
+
+[tool.setuptools]
+py-modules = ["research_agent"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"

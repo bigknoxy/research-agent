@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API &amp; CLI Docs — research-agent</title>
+  <meta name="description" content="Complete CLI reference, programmatic API, and internals documentation for research-agent.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<nav>
+  <div class="container">
+    <span class="logo">research-<em>agent</em></span>
+    <span class="spacer"></span>
+    <a href="index.html">Home</a>
+    <a href="design.html">Design</a>
+    <a href="https://github.com/bigknoxy/research-agent">GitHub</a>
+  </div>
+</nav>
+
+<div class="container content">
+  <h1>CLI &amp; API Reference</h1>
+  <p class="subtitle">Complete documentation for developers and AI agents</p>
+
+  <h2>CLI Usage</h2>
+  <pre><code>python research_agent.py [query] [--flags]</code></pre>
+
+  <h3>Options</h3>
+  <table>
+    <tr><th>Flag</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    <tr><td><code>query</code></td><td>string</td><td>—</td><td>Research query (positional, optional)</td></tr>
+    <tr><td><code>--eval</code></td><td>flag</td><td>false</td><td>Run evaluation suite</td></tr>
+    <tr><td><code>--eval-runs</code></td><td>int</td><td>2</td><td>Runs per eval task</td></tr>
+    <tr><td><code>--gepa</code></td><td>flag</td><td>false</td><td>Run GEPA self-improvement loop</td></tr>
+    <tr><td><code>--gepa-generations</code></td><td>int</td><td>3</td><td>Number of GEPA generations</td></tr>
+    <tr><td><code>--gepa-pool</code></td><td>int</td><td>4</td><td>Candidates per generation</td></tr>
+    <tr><td><code>--dogfood</code></td><td>flag</td><td>false</td><td>Full pipeline: eval + GEPA + self-patch</td></tr>
+    <tr><td><code>--searx-instance</code></td><td>string</td><td>—</td><td>SearXNG instance URL (e.g. http://localhost:8888)</td></tr>
+    <tr><td><code>--self-update</code></td><td>flag</td><td>false</td><td>Update research-agent.py from GitHub</td></tr>
+    <tr><td><code>--state</code></td><td>string</td><td>research_state.json</td><td>Path to state file</td></tr>
+    <tr><td><code>--force</code></td><td>flag</td><td>false</td><td>Re-run even if completed</td></tr>
+    <tr><td><code>--clear</code></td><td>flag</td><td>false</td><td>Clear saved state and exit</td></tr>
+    <tr><td><code>--report</code></td><td>flag</td><td>false</td><td>Print last report and exit</td></tr>
+  </table>
+
+  <h3>Examples</h3>
+  <pre><code># Basic research
+python research_agent.py "What are the latest developments in RAG?"
+
+# Run eval suite (3 tasks × 4 checks each)
+python research_agent.py --eval --eval-runs 1
+
+# Self-improvement loop
+python research_agent.py --gepa --gepa-generations 5 --gepa-pool 6
+
+# Full dogfood pipeline
+python research_agent.py --dogfood
+
+# Use custom SearXNG instance
+python research_agent.py --searx-instance http://searxng.local:8888 "latest AI papers"
+
+# Update to latest version
+python research_agent.py --self-update
+
+# Clear state and re-run
+python research_agent.py --clear
+
+# View last report
+python research_agent.py --report</code></pre>
+
+  <h2>Programmatic API</h2>
+  <p>Import and use research-agent as a Python module:</p>
+
+  <h3>ResearchAgent</h3>
+  <pre><code>from research_agent import ResearchAgent
+import asyncio
+
+agent = ResearchAgent("What is the impact of AI on healthcare?")
+state = asyncio.run(agent.run())
+print(state.report[:500])
+print(f"Status: {state.status}")
+print(f"Errors: {len(state.error_log)}")</code></pre>
+
+  <h3>EvaluationRunner</h3>
+  <pre><code>from research_agent import EvaluationRunner
+
+runner = EvaluationRunner(n_runs=2)
+results = asyncio.run(runner.run_all())
+for task in results.get("tasks", []):
+    title = task["title"]
+    errors = sum(r.get("errors", 0) for r in task.get("runs", []))
+    print(f"{title}: {'PASS' if errors == 0 else 'FAIL'}")</code></pre>
+
+  <h3>GEPALoop</h3>
+  <pre><code>from research_agent import GEPALoop, EvaluationRunner
+
+gepa = GEPALoop(pool_size=4, max_generations=3)
+eval_runner = EvaluationRunner(n_runs=1)
+results = asyncio.run(gepa.run_self_improvement(eval_runner))
+print(gepa.format_report(results))</code></pre>
+
+  <h3>SessionManager</h3>
+  <pre><code>from research_agent import SessionManager
+
+sm = SessionManager("my_state.json")
+state = sm.load()
+if state and state.report:
+    print(state.report)
+sm.clear()  # Delete saved state</code></pre>
+
+  <h2>Eval Suite</h2>
+  <p>The evaluation suite tests research quality across 3 tasks:</p>
+
+  <table>
+    <tr><th>ID</th><th>Task</th><th>Checks</th></tr>
+    <tr><td>eval-001</td><td>Ambiguous Health Claim — "What are the proven benefits of intermittent fasting?"</td><td>Executive summary, findings with sources, bib with citations, contradictions section</td></tr>
+    <tr><td>eval-002</td><td>Emerging Technology Impact — "How is AI being used in climate change research?"</td><td>Executive summary, findings with sources, bib with citations, contradictions section</td></tr>
+    <tr><td>eval-003</td><td>Historical Revisionism — "What caused the fall of the Roman Empire? Compare economic, military, and political factors."</td><td>Executive summary, findings with sources, bib with citations, contradictions section</td></tr>
+  </table>
+
+  <p>Each check is a keyword-based heuristic scan of the generated report. A report must contain specific expected sections and patterns to pass. All checks are deterministic and fast (~ms per check).</p>
+
+  <h3>Adding Eval Tasks</h3>
+  <pre><code># In research_agent.py, extend EVAL_TASKS:
+EVAL_TASKS = [
+    {
+        "title": "Your New Task",
+        "query": "Your research question here",
+        "checks": [
+            lambda r: ("expected_keyword" in r.lower()),
+            lambda r: (r.count("###") >= 3),
+        ],
+    },
+    # ... existing tasks
+]</code></pre>
+
+  <h2>GEPA Self-Improvement</h2>
+  <p>The GEPA loop evolves prompt strategies to maximize report quality:</p>
+
+  <h3>PromptCandidate</h3>
+  <pre><code>@dataclass
+class PromptCandidate:
+    id: str  # e.g. "gen0-0"
+    prompt_template: dict[str, str]  # One prompt per module
+    accuracy: float = 0.0
+    avg_speed_ms: float = 0.0
+    generation: int = 0</code></pre>
+
+  <h3>Lesson</h3>
+  <p>Reflections produce structured lessons that drive targeted mutations:</p>
+  <pre><code>@dataclass
+class Lesson:
+    module: str          # Which module needs improvement
+    check_name: str      # Which check failed
+    suggestion: str      # What to change in the prompt</code></pre>
+
+  <h3>Mutation Strategy</h3>
+  <ul>
+    <li>If a lesson targets a specific module, only that module's prompt is mutated</li>
+    <li>If no lessons, a random module is mutated to explore</li>
+    <li>If all modules have issues, all prompts are regenerated</li>
+    <li>Winner is selected by accuracy (Pareto-optimal: max accuracy, then max speed)</li>
+  </ul>
+
+  <h2>Grading System</h2>
+  <p>Two-tier grading pipeline:</p>
+
+  <table>
+    <tr><th>Grader</th><th>Method</th><th>Dependencies</th></tr>
+    <tr><td>HeuristicGrader</td><td>Keyword-based report quality analysis</td><td>None (built-in)</td></tr>
+    <tr><td>OllamaGrader</td><td>Local LLM via Ollama API</td><td>Ollama installed + model pulled</td></tr>
+    <tr><td>ModelGrader</td><td>Router: tries Ollama, falls back to heuristic</td><td>Auto-detected</td></tr>
+  </table>
+
+  <p>The heuristic grader checks: executive summary length, finding count with citations, source diversity, contradiction analysis depth, and conclusion quality. Returns 0.0-1.0 score + structured feedback.</p>
+
+  <h2>Self-Patching</h2>
+  <p>After a GEPA run, the best candidate's prompts are written to <code>_self_patch.py</code>:</p>
+  <pre><code># Apply learned improvements
+python _self_patch.py
+# Patched to v2.X.X with N prompt updates</code></pre>
+  <p>The patch script modifies <code>research_agent.py</code> in-place, updating <code>SCRIPT_VERSION</code> and modifying the <code>BASE_PROMPTS</code> dictionary. The original file is backed up by git (the patch only makes surgical replacements).</p>
+
+  <h2>Environment Variables</h2>
+  <table>
+    <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
+    <tr><td><code>PYTHONUNBUFFERED</code></td><td>—</td><td>Set to 1 for unbuffered output in CI</td></tr>
+  </table>
+
+  <h2>Version History</h2>
+  <table>
+    <tr><th>Version</th><th>Changes</th></tr>
+    <tr><td>2.0.0</td><td>Full GEPA loop, Ollama grading, self-patching, rich CLI</td></tr>
+    <tr><td>2.0.1</td><td>Fixed self-patch generator, improved Wikipedia fallback</td></tr>
+  </table>
+
+</div>
+
+<footer>
+  <div class="container">
+    <p>MIT License &middot; <a href="https://github.com/bigknoxy/research-agent">bigknoxy/research-agent</a></p>
+  </div>
+</footer>
+</body>
+</html>

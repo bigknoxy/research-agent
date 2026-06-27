@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Extract version
+        id: version
+        run: echo "tag=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Build standalone artifact
+        run: cp research_agent.py research_agent-${{ steps.version.outputs.tag }}.py
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.tag }}
+          body: |
+            ## research-agent v${{ steps.version.outputs.tag }}
+
+            ### Install
+            ```bash
+            pip install git+https://github.com/bigknoxy/research-agent.git@v${{ steps.version.outputs.tag }}
+            ```
+
+            ### What's Changed
+            See commit history for details.
+          generate_release_notes: true
+          files: |
+            research_agent-${{ steps.version.outputs.tag }}.py

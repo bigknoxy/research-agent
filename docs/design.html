@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design — research-agent</title>
+  <meta name="description" content="Architecture and design decisions for research-agent.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<nav>
+  <div class="container">
+    <span class="logo">research-<em>agent</em></span>
+    <span class="spacer"></span>
+    <a href="index.html">Home</a>
+    <a href="api.html">Docs</a>
+    <a href="https://github.com/bigknoxy/research-agent">GitHub</a>
+  </div>
+</nav>
+
+<div class="container content">
+  <h1>Design Doc</h1>
+  <p class="subtitle">Architecture, components, and design decisions for research-agent v2</p>
+
+  <h2>Architecture Overview</h2>
+  <p>research-agent is a single-file Python CLI app (~1500 lines) organized as a pipeline of specialized modules, each responsible for one phase of the research workflow. The GEPA self-improvement loop wraps the entire pipeline to evolve prompt strategies across generations.</p>
+
+  <pre><code>┌──────────────────────────────────────────────────────────────────────┐
+│                        CLI (argparse + rich)                          │
+│   --eval │ --gepa │ --dogfood │ &lt;query&gt; │ --searx-instance &lt;url&gt;    │
+└──────────────────────────────────────────────────────────────────────┘
+                                    │
+                          ┌─────────▼─────────┐
+                          │   ResearchAgent    │
+                          │  (orchestrator)    │
+                          └─────────┬─────────┘
+                                    │
+              ┌─────────────────────┼──────────────────────┐
+              ▼                     ▼                      ▼
+    ┌─────────────────┐   ┌───────────────┐   ┌──────────────────────┐
+    │   TaskPlanner    │   │  WebCrawler   │   │ ContradictionEngine  │
+    │  (decompose      │   │  (DDG + WP    │   │ (cross-source        │
+    │   query →        │   │   + SearXNG)  │   │  conflict detection) │
+    │   sub-questions)  │   │               │   └──────────┬───────────┘
+    └─────────────────┘   └───────────────┘              │
+              │                     │                     │
+              └─────────────────────┼─────────────────────┘
+                                    ▼
+                    ┌────────────────────────────┐
+                    │   ReportSynthesizer         │
+                    │   (structured markdown      │
+                    │    report generation)       │
+                    └────────────────────────────┘
+                                    │
+                                    ▼
+                    ┌────────────────────────────┐
+                    │   Report (output)           │
+                    └────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                    GEPA Self-Improvement Loop                         │
+│                                                                      │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────────┐  │
+│   │ Evaluate │───▶│  Grade   │───▶│ Reflect  │───▶│   Mutate     │  │
+│   │ Pool     │    │ Candidates│    │ (Lessons) │    │ (Next Gen)   │  │
+│   └──────────┘    └──────────┘    └──────────┘    └──────┬───────┘  │
+│       ▲                                                   │          │
+│       └───────────────────────────────────────────────────┘          │
+└──────────────────────────────────────────────────────────────────────┘</code></pre>
+
+  <h2>Component Breakdown</h2>
+
+  <h3>TaskPlanner</h3>
+  <p>Decomposes the user's query into sub-questions and a structured research plan. Uses heuristic templates (not LLM) to stay fast and deterministic. Generates 3-5 sub-questions targeting different angles.</p>
+
+  <h3>WebCrawler</h3>
+  <p>Multi-source web retrieval layer with three backends:</p>
+  <table>
+    <tr><th>Backend</th><th>Source</th><th>Status</th></tr>
+    <tr><td>DuckDuckGo HTML</td><td>General web search</td><td>Primary (may hit CAPTCHA)</td></tr>
+    <tr><td>Wikipedia API</td><td>Wikipedia articles + search</td><td>Fallback (rate-limited)</td></tr>
+    <tr><td>SearXNG</td><td>Self-hosted instance</td><td>Optional (<code>--searx-instance</code>)</td></tr>
+  </table>
+  <p>Uses <code>asyncio.Semaphore</code> for concurrency control, URL dedup cache, and HTTPX async client.</p>
+
+  <h3>ContradictionEngine</h3>
+  <p>Analyzes multiple source texts for conflicting statistics, contradictory claims, and divergent narratives. Produces a contradiction summary with conflict lines and source attribution.</p>
+
+  <h3>ReportSynthesizer</h3>
+  <p>Generates a structured markdown report with executive summary, key findings, contradictions, and conclusions. Uses heuristic templates with LLM-grade scoring via the <code>ModelGrader</code>.</p>
+
+  <h2>GEPA Loop</h2>
+  <p>The <strong>Generative Evolutionary Prompt Adaptation</strong> loop is the core self-improvement mechanism:</p>
+
+  <ol>
+    <li><strong>Generate</strong> — Create a pool of <code>PromptCandidate</code> variants by mutating prompt templates for each module</li>
+    <li><strong>Evaluate</strong> — Run each candidate through the full eval suite (3 tasks × 4 checks each)</li>
+    <li><strong>Grade</strong> — Score each candidate on accuracy (pass rate via heuristic grader) and speed</li>
+    <li><strong>Reflect</strong> — Analyze failed checks to produce structured <code>Lesson</code> instances</li>
+    <li><strong>Mutate</strong> — Apply lessons to generate the next generation (targeted mutations on failing modules)</li>
+    <li><strong>Select</strong> — Choose the winner via Pareto frontier (accuracy first, then speed)</li>
+    <li><strong>Self-Patch</strong> — Generate <code>_self_patch.py</code> to bake winning prompts into the source</li>
+  </ol>
+
+  <h2>Grading System</h2>
+  <p>Two-tier grading:</p>
+  <table>
+    <tr><th>Grader</th><th>Method</th><th>Use Case</th></tr>
+    <tr><td>HeuristicGrader</td><td>Keyword-based scoring on report structure</td><td>Default — fast, deterministic, always works</td></tr>
+    <tr><td>OllamaGrader</td><td>Local LLM inference via Ollama API</td><td>When Ollama available — richer quality signal</td></tr>
+  </table>
+  <p>The heuristic grader checks: executive summary presence, finding structure, source citations, contradiction analysis, and conclusion completeness. 4 checks per task, 12 total across the eval suite.</p>
+
+  <h2>Eval Suite</h2>
+  <p>Built-in evaluation tasks that exercise different research scenarios:</p>
+  <table>
+    <tr><th>Task</th><th>Query</th><th>Checks</th></tr>
+    <tr><td>Ambiguous Health Claim</td><td>Benefits of intermittent fasting</td><td>4</td></tr>
+    <tr><td>Emerging Technology Impact</td><td>AI in climate change research</td><td>4</td></tr>
+    <tr><td>Historical Revisionism</td><td>Fall of the Roman Empire</td><td>4</td></tr>
+  </table>
+  <p>Each task is run multiple times (<code>--eval-runs N</code>) for statistical significance. Pass rate and duration are reported per-task.</p>
+
+  <h2>Design Decisions</h2>
+
+  <h3>Single file over package</h3>
+  <p>Keeps deployment trivial: <code>pip install git+...</code> or just download the file. Self-patching is simpler without package imports. Downside: 1500 lines in one file, but the module structure (classes + clear sections) keeps it navigable.</p>
+
+  <h3>Heuristic over LLM (by default)</h3>
+  <p>LLM calls add latency (5-15s per report), require GPU memory, and introduce nondeterminism. The heuristic grader is instant, deterministic, and sufficient for regression detection. LLM grading is available as an upgrade.</p>
+
+  <h3>Separate self-patch file</h3>
+  <p>Rather than modifying the script in-place during GEPA, we generate <code>_self_patch.py</code> — a standalone script that applies learned prompt improvements. This avoids string-collision bugs during in-place rewriting and gives the user a chance to review changes before applying.</p>
+
+  <h3>State persistence via JSON</h3>
+  <p>Research progress is saved to JSON state files. This enables resumability (if a crawl is interrupted, it picks up where it left off) and debugging (inspect what was searched, fetched, and synthesized). Unique paths per run prevent cross-contamination.</p>
+
+  <h2>Data Flow</h2>
+  <pre><code>1. Input Query
+2. TaskPlanner: decompose → [SubQ1, SubQ2, ...]
+3. WebCrawler:
+   a. Try SearXNG (if configured)
+   b. Try DDG HTML search
+   c. Fallback to Wikipedia API
+   d. Fetch page content (with Semaphore concurrency)
+4. ContradictionEngine: analyze sources → conflict lines
+5. ReportSynthesizer: synthesize → structured markdown
+6. Report output (stdout + state file)
+7. GradeReport output (eval mode → pass/fail per check)</code></pre>
+
+</div>
+
+<footer>
+  <div class="container">
+    <p>MIT License &middot; <a href="https://github.com/bigknoxy/research-agent">bigknoxy/research-agent</a></p>
+  </div>
+</footer>
+</body>
+</html>

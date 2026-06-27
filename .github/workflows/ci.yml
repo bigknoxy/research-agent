@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install httpx beautifulsoup4 lxml rich
+      - name: Syntax check
+        run: python -c "import py_compile; py_compile.compile('research_agent.py', doraise=True)"
+      - name: Import check
+        run: python -c "import research_agent" 2>&1 | head -5
+
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install httpx beautifulsoup4 lxml rich
+      - name: Run evaluation suite
+        run: python research_agent.py --eval --eval-runs 1
+        env:
+          PYTHONUNBUFFERED: 1

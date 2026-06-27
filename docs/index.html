@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>research-agent — Self-improving deep research CLI</title>
+  <meta name="description" content="Self-improving deep research agent for the terminal. Built-in eval suite and GEPA self-improvement loop.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<nav>
+  <div class="container">
+    <span class="logo">research-<em>agent</em></span>
+    <span class="spacer"></span>
+    <a href="design.html">Design</a>
+    <a href="api.html">Docs</a>
+    <a href="https://github.com/bigknoxy/research-agent">GitHub</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <h1>research-<em>agent</em></h1>
+  <p>Self-improving deep research agent for the terminal.<br>Built-in eval suite. GEPA self-improvement loop. Single file.</p>
+  <div class="install-box">
+    <span class="prompt">$</span>
+    <span class="cmd">pip install git+https://github.com/bigknoxy/research-agent.git</span>
+  </div>
+  <div class="quick-links">
+    <a href="design.html">📐 Design Doc</a>
+    <a href="api.html">📖 API &amp; CLI Docs</a>
+    <a href="https://github.com/bigknoxy/research-agent">⭐ GitHub</a>
+  </div>
+</div>
+
+<div class="container">
+  <section>
+    <h2>Features</h2>
+    <div class="features">
+      <div class="feature-card">
+        <span class="icon">🔍</span>
+        <h3>Deep Research</h3>
+        <p>Multi-step web search, cross-source contradiction detection, structured report synthesis.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">🧪</span>
+        <h3>Eval-Driven</h3>
+        <p>Built-in evaluation suite with 3+ research tasks and graded quality checks. Run with <code>--eval</code>.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">🔄</span>
+        <h3>Self-Improving</h3>
+        <p>GEPA loop evolves prompt strategies across generations. Discovers what works best automatically.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">📝</span>
+        <h3>Self-Patching</h3>
+        <p>Generates <code>_self_patch.py</code> with learned improvements. Apply with one command.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">🤖</span>
+        <h3>Local LLM Grading</h3>
+        <p>Auto-detects Ollama models for quality scoring. Falls back to heuristic grading when no GPU available.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">📦</span>
+        <h3>Single File</h3>
+        <p>Zero infrastructure. One Python file. <code>pip install</code> from GitHub and you&rsquo;re running.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Quick Start</h2>
+    <pre><code># Install
+pip install git+https://github.com/bigknoxy/research-agent.git
+
+# Run a research query
+python research_agent.py "What are the latest developments in RAG?"
+
+# Run the eval suite
+python research_agent.py --eval --eval-runs 1
+
+# Run self-improvement loop
+python research_agent.py --gepa --gepa-generations 3
+
+# Full dogfood pipeline (eval + GEPA + self-patch)
+python research_agent.py --dogfood
+
+# Apply learned improvements
+python _self_patch.py
+
+# Update to latest
+pip install --upgrade git+https://github.com/bigknoxy/research-agent.git
+
+# Uninstall
+pip uninstall research-agent</code></pre>
+  </section>
+
+  <section>
+    <h2>How It Works</h2>
+    <p>research-agent is built around a pipeline of specialized agents:</p>
+    <pre><code>Query → TaskPlanner → WebCrawler → ContradictionEngine → ReportSynthesizer → Report
+         ↑              ↑            ↑                     ↑
+         └─── Prompt strategies evolved by GEPA loop ──────┘</code></pre>
+    <p>The GEPA (Generative Evolutionary Prompt Adaptation) loop evaluates prompt strategy variants against a test suite, selects winners by accuracy, and mutates them to discover better strategies. All improvements self-patch into the script.</p>
+    <p><a href="design.html">Read the full design doc →</a></p>
+  </section>
+
+  <section>
+    <h2>Why?</h2>
+    <p>Most AI research tools are closed-source, require API keys, or depend on heavy infrastructure. research-agent is:</p>
+    <ul>
+      <li><strong>Free</strong> — no API keys, no subscription</li>
+      <li><strong>Private</strong> — runs entirely on your machine</li>
+      <li><strong>Self-improving</strong> — gets better with every run via GEPA</li>
+      <li><strong>Auditable</strong> — single file, readable code, deterministic evals</li>
+    </ul>
+  </section>
+</div>
+
+<footer>
+  <div class="container">
+    <p>MIT License &middot; <a href="https://github.com/bigknoxy/research-agent">bigknoxy/research-agent</a></p>
+  </div>
+</footer>
+</body>
+</html>

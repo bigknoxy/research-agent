@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+research_state_*.json
+.venv/
+venv/
+.env

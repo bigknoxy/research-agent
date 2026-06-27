@@ -1,0 +1,6 @@
+# Default owner is @bigknoxy (admin)
+* @bigknoxy
+
+# Docs auto-sync: any PR touching docs/ or README.md requires admin review
+docs/ @bigknoxy
+README.md @bigknoxy
