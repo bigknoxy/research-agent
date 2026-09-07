@@ -22,5 +22,5 @@ research-agent = "research_agent:main"
 py-modules = ["research_agent"]
 
 [build-system]
-requires = ["setuptools>=68.0"]
+requires = ["setuptools>=84.0.0"]
 build-backend = "setuptools.build_meta"
